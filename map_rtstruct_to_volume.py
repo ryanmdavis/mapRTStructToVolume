@@ -59,7 +59,7 @@ def mapRTStructToVolume(original_volume_loc, slicer_volume_loc, rtss_save_loc):
     
     # get the rtss location and make sure there is only one RTSS in that directory as expected:
     new_vol_files=os.listdir(slicer_volume_loc)
-    rtss_files=[file for file in new_vol_files if "rtss" in file]
+    rtss_files=[file for file in new_vol_files if (("rtss" in file) or ("rtstruct" in file))]
     assert len(rtss_files) == 1
     rtss_file=rtss_files[0]
     
@@ -84,13 +84,16 @@ def mapRTStructToVolume(original_volume_loc, slicer_volume_loc, rtss_save_loc):
                     original_vol_SOPInstanceUID=new_to_original_UID_mapping_df[new_to_original_UID_mapping_df["SOPInstanceUID_New"]==new_vol_SOPInstanceUID]["SOPInstanceUID_Original"].iloc[0]
                     rtss[0x3006,0x0010][i_RefFrameOfRef][0x3006,0x0012][i_RTRefStudy][0x3006,0x0014][i_RTRefSeries][0x3006,0x0016][i_ContourImage][0x0008,0x1155].value=original_vol_SOPInstanceUID
                     
-                    # ReferenceSOPClassUID                
-                    rtss[0x3006,0x0010][i_RefFrameOfRef][0x3006,0x0012][i_RTRefStudy][0x3006,0x0014][i_RTRefSeries][0x3006,0x0016][i_ContourImage][0x0008,0x1150].value=original_vol_attr["SOPClassUID"]
+                    # ReferenceSOPClassUID
+                    if (0x0008,0x1150) in rtss[0x3006,0x0010][i_RefFrameOfRef][0x3006,0x0012][i_RTRefStudy][0x3006,0x0014][i_RTRefSeries][0x3006,0x0016][i_ContourImage]:               
+                        rtss[0x3006,0x0010][i_RefFrameOfRef][0x3006,0x0012][i_RTRefStudy][0x3006,0x0014][i_RTRefSeries][0x3006,0x0016][i_ContourImage][0x0008,0x1150].value=original_vol_attr["SOPClassUID"]
                     
                 # Referenced SeriesInstanceUID
                 original_series=original_uids_df[original_uids_df["SOPInstanceUID_Original"] == original_vol_SOPInstanceUID]["SeriesInstanceUID"].iloc[0]
-                rtss[0x3006,0x0010][i_RefFrameOfRef][0x3006,0x0012][i_RTRefStudy][0x3006,0x0014][i_RTRefSeries][0x0020,0x000e].value=original_series
-  
+                if (0x0020,0x000e) in rtss[0x3006,0x0010][i_RefFrameOfRef][0x3006,0x0012][i_RTRefStudy][0x3006,0x0014][i_RTRefSeries]:
+                    rtss[0x3006,0x0010][i_RefFrameOfRef][0x3006,0x0012][i_RTRefStudy][0x3006,0x0014][i_RTRefSeries][0x0020,0x000e].value=original_series
+                else: # some RTStructs don't contain this element, so add it
+                    rtss[0x3006,0x0010][i_RefFrameOfRef][0x3006,0x0012][i_RTRefStudy][0x3006,0x0014][0].add_new((0x0020,0x000e), "UI", original_series)
     # Set Attributes within ROIContourSequence
     for i_ROIContourSequence in range(len(list(rtss[0x3006,0x0039]))):
         for i_ContourSequence in range(len(list(rtss[0x3006,0x0039][i_ROIContourSequence][0x3006,0x0040]))):
@@ -107,18 +110,18 @@ def mapRTStructToVolume(original_volume_loc, slicer_volume_loc, rtss_save_loc):
                 new_contour_str=[str(el) for el in new_contour_float]
                 rtss[0x3006,0x0039][i_ROIContourSequence][0x3006,0x0040][i_ContourSequence][0x3006,0x0050].value = new_contour_str
                 raise UserWarning("Have not verified that sorting-based SOPInstanceUID mapping works. Compare the contour locations on the slicer and original volumes to make sure.")
-                
-            for i_ContourImageSequence in range(len(list(rtss[0x3006,0x0039][i_ROIContourSequence][0x3006,0x0040][i_ContourSequence][0x3006,0x0016]))):
+            if (0x3006,0x0016) in rtss[0x3006,0x0039][i_ROIContourSequence][0x3006,0x0040][i_ContourSequence]:
+                for i_ContourImageSequence in range(len(list(rtss[0x3006,0x0039][i_ROIContourSequence][0x3006,0x0040][i_ContourSequence][0x3006,0x0016]))):
+    
+                    # Referenced SOPInstanceUID
+                    new_vol_ReferencedSOPInstanceUID=rtss[0x3006,0x0039][i_ROIContourSequence][0x3006,0x0040][i_ContourSequence][0x3006,0x0016][i_ContourImageSequence][0x0008,0x1155].value
+                    original_vol_ReferencedSOPInstanceUID=new_to_original_UID_mapping_df[new_to_original_UID_mapping_df["SOPInstanceUID_New"]==new_vol_ReferencedSOPInstanceUID]["SOPInstanceUID_Original"].iloc[0]
+                    rtss[0x3006,0x0039][i_ROIContourSequence][0x3006,0x0040][i_ContourSequence][0x3006,0x0016][i_ContourImageSequence][0x0008,0x1155].value=original_vol_ReferencedSOPInstanceUID
+                    
+                    # ReferenceSOPClassUID
+                    rtss[0x3006,0x0039][i_ROIContourSequence][0x3006,0x0040][i_ContourSequence][0x3006,0x0016][i_ContourImageSequence][0x0008,0x1150].value=original_vol_attr["SOPClassUID"]
 
-                # Referenced SOPInstanceUID
-                new_vol_ReferencedSOPInstanceUID=rtss[0x3006,0x0039][i_ROIContourSequence][0x3006,0x0040][i_ContourSequence][0x3006,0x0016][i_ContourImageSequence][0x0008,0x1155].value
-                original_vol_ReferencedSOPInstanceUID=new_to_original_UID_mapping_df[new_to_original_UID_mapping_df["SOPInstanceUID_New"]==new_vol_ReferencedSOPInstanceUID]["SOPInstanceUID_Original"].iloc[0]
-                rtss[0x3006,0x0039][i_ROIContourSequence][0x3006,0x0040][i_ContourSequence][0x3006,0x0016][i_ContourImageSequence][0x0008,0x1155].value=original_vol_ReferencedSOPInstanceUID
-                
-                # ReferenceSOPClassUID
-                rtss[0x3006,0x0039][i_ROIContourSequence][0x3006,0x0040][i_ContourSequence][0x3006,0x0016][i_ContourImageSequence][0x0008,0x1150].value=original_vol_attr["SOPClassUID"]
-
-    pydicom.filewriter.dcmwrite(os.path.join(rtss_save_loc,rtss_file),rtss)
+    pydicom.filewriter.dcmwrite(os.path.join(rtss_save_loc,"mod_"+rtss_file),rtss)
             
     return True
 
@@ -156,14 +159,15 @@ def getUIDAndZPos(directory):
     # get mapping of SOPInstanceUIDs to z position
     uids_df=pd.DataFrame()
     image_files=os.listdir(directory)
-    image_files=[im_f for im_f in image_files if (".dcm" in im_f and "rtss" not in im_f)]
+    image_files=[im_f for im_f in image_files if (".dcm" in im_f and (("rtss" not in im_f) or ("rtstruct" not in im_f)))]
 #     count=0
     for image_file in image_files:
         try:
             dcm=pydicom.dcmread(directory+"\\"+image_file)
+            to_append=pd.DataFrame({"SOPInstanceUID":[dcm[0x0008,0x0018].value],"ImageZPosMm":round(float(dcm[0x0020,0x0032].value[2]),1),"SOPClassUID":[dcm[0x0008,0x0016].value],"SeriesInstanceUID":[dcm[0x0020,0x000e].value],"StudyInstanceUID":[dcm[0x0020,0x000d].value],"FileName":[image_file]})
         except:
             print("t")
-        to_append=pd.DataFrame({"SOPInstanceUID":[dcm[0x0008,0x0018].value],"ImageZPosMm":round(float(dcm[0x0020,0x0032].value[2]),1),"SOPClassUID":[dcm[0x0008,0x0016].value],"SeriesInstanceUID":[dcm[0x0020,0x000e].value],"StudyInstanceUID":[dcm[0x0020,0x000d].value],"FileName":[image_file]})
+        
         uids_df=uids_df.append(to_append,ignore_index=True,sort=False)
     
     attr={}
@@ -186,3 +190,9 @@ def getUIDAndZPos(directory):
     attr["StudyInstanceUID"]=StudyInstanceUID_set.pop()    
     
     return uids_df,attr
+
+if __name__ == "__main__":
+    orig="C:\\Users\\davisr28\\Documents\\RTSS\\HealthMyne\\roche_example_rtstruct\\With HealthMyne RTSTruct\\"
+    hm=orig
+    s="C:\\Users\\davisr28\\Documents\\RTSS\\HealthMyne\\roche_example_rtstruct\\"
+    mapRTStructToVolume(orig, hm, s)
